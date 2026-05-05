@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, time
 
+from aiohttp import web
 from aiogram import Bot, Dispatcher, Router, types
 from aiogram.exceptions import TelegramConflictError, TelegramNetworkError
 from aiogram.filters import Command
@@ -94,6 +95,20 @@ async def notification_task() -> None:
         await asyncio.sleep(30)
 
 
+async def start_web_server() -> None:
+    app = web.Application()
+
+    async def healthcheck(request: web.Request) -> web.Response:
+        return web.Response(text="OK")
+
+    app.router.add_get("/", healthcheck)
+    port = int(os.getenv("PORT", "8000"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+
 @router.message(Command(commands=["start"]))
 async def start_handler(message: types.Message) -> None:
     settings = user_settings.setdefault(message.from_user.id, UserSettings())
@@ -153,6 +168,7 @@ async def hours_handler(message: types.Message) -> None:
 async def main() -> None:
     dp.include_router(router)
     asyncio.create_task(notification_task())
+    asyncio.create_task(start_web_server())
     while True:
         try:
             await dp.start_polling(bot)

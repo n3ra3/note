@@ -1,9 +1,10 @@
 services:
-  - type: worker
+  - type: web
     name: notification-bot
     env: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python bot.py"
+    healthCheckPath: "/"
     envVars:
       - key: API_TOKEN
         sync: true
