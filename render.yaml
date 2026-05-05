@@ -1,0 +1,11 @@
+services:
+  - type: worker
+    name: notification-bot
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python bot.py"
+    envVars:
+      - key: API_TOKEN
+        sync: true
+      - key: PYTHONUNBUFFERED
+        value: "1"
