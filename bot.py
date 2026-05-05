@@ -35,6 +35,7 @@ start_keyboard = ReplyKeyboardMarkup(
 stop_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Старт")],
+        [KeyboardButton(text="Стоп")],
         [KeyboardButton(text="Часы")],
     ],
     resize_keyboard=True,
