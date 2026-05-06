@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 from dataclasses import dataclass
@@ -50,7 +51,60 @@ class UserSettings:
     last_sent_key: str | None = None
 
 
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+USERS_FILE = os.path.join(DATA_DIR, "users.json")
+
 user_settings: dict[int, UserSettings] = {}
+
+
+def time_to_str(value: time | None) -> str | None:
+    return value.strftime("%H:%M") if value else None
+
+
+def str_to_time(value: str | None) -> time | None:
+    if not value:
+        return None
+    return datetime.strptime(value, "%H:%M").time()
+
+
+def load_user_settings() -> None:
+    if not os.path.exists(USERS_FILE):
+        return
+    try:
+        with open(USERS_FILE, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        logging.error("Failed to load users.json: %s", exc)
+        return
+    for user_id_str, data in raw.items():
+        try:
+            user_id = int(user_id_str)
+        except ValueError:
+            continue
+        settings = UserSettings(
+            enabled=bool(data.get("enabled", False)),
+            start_time=str_to_time(data.get("start_time")),
+            end_time=str_to_time(data.get("end_time")),
+            last_sent_key=None,
+        )
+        user_settings[user_id] = settings
+
+
+def save_user_settings() -> None:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    payload = {
+        str(user_id): {
+            "enabled": settings.enabled,
+            "start_time": time_to_str(settings.start_time),
+            "end_time": time_to_str(settings.end_time),
+        }
+        for user_id, settings in user_settings.items()
+    }
+    try:
+        with open(USERS_FILE, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=True, indent=2)
+    except OSError as exc:
+        logging.error("Failed to save users.json: %s", exc)
 
 
 def parse_hours(text: str) -> tuple[time, time] | None:
@@ -103,6 +157,7 @@ async def start_web_server() -> None:
         return web.Response(text="OK")
 
     app.router.add_get("/", healthcheck)
+    app.router.add_get("/ping", healthcheck)
     port = int(os.getenv("PORT", "8000"))
     runner = web.AppRunner(app)
     await runner.setup()
@@ -114,6 +169,7 @@ async def start_web_server() -> None:
 async def start_handler(message: types.Message) -> None:
     settings = user_settings.setdefault(message.from_user.id, UserSettings())
     settings.enabled = True
+    save_user_settings()
     await message.reply(
         "Уведомления включены. Нажми 'Часы' и задай рабочее время (HH:MM-HH:MM).",
         reply_markup=stop_keyboard,
@@ -124,6 +180,7 @@ async def start_handler(message: types.Message) -> None:
 async def stop_handler(message: types.Message) -> None:
     settings = user_settings.setdefault(message.from_user.id, UserSettings())
     settings.enabled = False
+    save_user_settings()
     await message.reply("Уведомления остановлены.", reply_markup=start_keyboard)
 
 
@@ -131,6 +188,7 @@ async def stop_handler(message: types.Message) -> None:
 async def restart_handler(message: types.Message) -> None:
     settings = user_settings.setdefault(message.from_user.id, UserSettings())
     settings.enabled = True
+    save_user_settings()
     await message.reply("Уведомления включены.", reply_markup=stop_keyboard)
 
 
@@ -160,6 +218,7 @@ async def hours_handler(message: types.Message) -> None:
     settings = user_settings.setdefault(message.from_user.id, UserSettings())
     settings.start_time = start_time
     settings.end_time = end_time
+    save_user_settings()
     await message.reply(
         f"Часы заданы: {start_time.strftime('%H:%M')}-{end_time.strftime('%H:%M')}",
         reply_markup=stop_keyboard if settings.enabled else start_keyboard,
@@ -167,6 +226,7 @@ async def hours_handler(message: types.Message) -> None:
 
 
 async def main() -> None:
+    load_user_settings()
     dp.include_router(router)
     asyncio.create_task(notification_task())
     asyncio.create_task(start_web_server())
