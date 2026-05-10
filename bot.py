@@ -187,7 +187,16 @@ async def notification_task() -> None:
                 continue
             try:
                 if now.minute in (0, 30):
-                    message_text = "Напоминание: сейчас ровно получас."
+                    current_time = now.strftime("%H:%M")
+                    message_text = (
+                        f"Уведомляем, что только что наступил {current_time}. "
+                        "Ссылки на кейсы доступны ниже:\n"
+                        "Kilowatt case - https://pirateswap.com/exchanger?mhn=Kilowatt+Case\n"
+                        "Revolution case - https://pirateswap.com/exchanger?mhn=Revolution+Case\n"
+                        "Fracture case - https://pirateswap.com/exchanger?mhn=Fracture+Case\n"
+                        "Recoil case - https://pirateswap.com/exchanger?mhn=Recoil+Case\n"
+                        "Snakebite case - https://pirateswap.com/exchanger?mhn=Snakebite+Case"
+                    )
                 elif settings.reminder_pack == "pack_5_4_3_2_1":
                     remaining = 30 - now.minute if now.minute < 30 else 60 - now.minute
                     message_text = f"Напоминание: {remaining} минут до следующего получаса."
