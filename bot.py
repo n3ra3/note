@@ -3,7 +3,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher, Router, types
@@ -147,23 +147,23 @@ def is_within_hours(now_time: time, start_time: time, end_time: time) -> bool:
 PACKS = {
     "pack_5": {
         "label": "Пак 5",
-        "minutes": (25, 55),
+        "minutes": (0, 25, 30, 55),
     },
     "pack_5_1": {
         "label": "Пак 5+1",
-        "minutes": (25, 29, 55, 59),
+        "minutes": (0, 25, 29, 30, 55, 59),
     },
     "pack_5_3": {
         "label": "Пак 5+3",
-        "minutes": (25, 27, 55, 57),
+        "minutes": (0, 25, 27, 30, 55, 57),
     },
     "pack_5_3_1": {
         "label": "Пак 5+3+1",
-        "minutes": (25, 27, 29, 55, 57, 59),
+        "minutes": (0, 25, 27, 29, 30, 55, 57, 59),
     },
     "pack_5_4_3_2_1": {
         "label": "Пак 5+4+3+2+1",
-        "minutes": (25, 26, 27, 28, 29, 55, 56, 57, 58, 59),
+        "minutes": (0, 25, 26, 27, 28, 29, 30, 55, 56, 57, 58, 59),
     },
 }
 
@@ -186,7 +186,9 @@ async def notification_task() -> None:
             if settings.last_sent_key == minute_key:
                 continue
             try:
-                if settings.reminder_pack == "pack_5_4_3_2_1":
+                if now.minute in (0, 30):
+                    message_text = "Напоминание: сейчас ровно получас."
+                elif settings.reminder_pack == "pack_5_4_3_2_1":
                     remaining = 30 - now.minute if now.minute < 30 else 60 - now.minute
                     message_text = f"Напоминание: {remaining} минут до следующего получаса."
                 elif now.minute in (29, 59) and settings.reminder_pack in ("pack_5_1", "pack_5_3_1"):
@@ -199,7 +201,9 @@ async def notification_task() -> None:
                 settings.last_sent_key = minute_key
             except TelegramNetworkError as exc:
                 logging.error("Network error while sending reminder: %s", exc)
-        await asyncio.sleep(30)
+        next_tick = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
+        delay = (next_tick - datetime.now()).total_seconds()
+        await asyncio.sleep(max(delay, 0.5))
 
 
 async def start_web_server() -> None:
