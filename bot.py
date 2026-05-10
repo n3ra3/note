@@ -4,6 +4,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher, Router, types
@@ -14,6 +15,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 API_TOKEN = os.getenv("API_TOKEN")
+TZ_NAME = os.getenv("TZ_NAME", "Europe/Chisinau")
 
 if not API_TOKEN:
     raise ValueError("API_TOKEN is not set in the environment variables.")
@@ -172,7 +174,7 @@ PACK_LABEL_TO_KEY = {pack["label"]: key for key, pack in PACKS.items()}
 
 async def notification_task() -> None:
     while True:
-        now = datetime.now()
+        now = datetime.now(ZoneInfo(TZ_NAME))
         for user_id, settings in list(user_settings.items()):
             if not settings.enabled:
                 continue
@@ -262,8 +264,8 @@ async def restart_handler(message: types.Message) -> None:
 
 @router.message(Command(commands=["time"]))
 async def time_handler(message: types.Message) -> None:
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    await message.reply(f"Текущее время сервера: {current_time}")
+    current_time = datetime.now(ZoneInfo(TZ_NAME)).strftime("%Y-%m-%d %H:%M:%S")
+    await message.reply(f"Текущее время сервера ({TZ_NAME}): {current_time}")
 
 
 @router.message(Command(commands=["status"]))
