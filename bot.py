@@ -30,7 +30,7 @@ start_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Старт")],
         [KeyboardButton(text="Стоп")],
-        [KeyboardButton(text="Часы")],
+        [KeyboardButton(text="Часы"), KeyboardButton(text="Убрать часы")],
         [KeyboardButton(text="Пак")],
     ],
     resize_keyboard=True,
@@ -40,7 +40,7 @@ stop_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Старт")],
         [KeyboardButton(text="Стоп")],
-        [KeyboardButton(text="Часы")],
+        [KeyboardButton(text="Часы"), KeyboardButton(text="Убрать часы")],
         [KeyboardButton(text="Пак")],
     ],
     resize_keyboard=True,
@@ -293,6 +293,19 @@ async def set_hours_prompt(message: types.Message) -> None:
     settings.pending_action = "work"
     save_user_settings()
     await message.reply("Отправь рабочие часы в формате 24ч: HH:MM-HH:MM")
+
+
+@router.message(lambda message: message.text == "Убрать часы")
+async def clear_hours(message: types.Message) -> None:
+    settings = user_settings.setdefault(message.from_user.id, UserSettings())
+    settings.start_time = None
+    settings.end_time = None
+    settings.pending_action = None
+    save_user_settings()
+    await message.reply(
+        "Рабочие часы сняты. Уведомления будут приходить всегда.",
+        reply_markup=stop_keyboard if settings.enabled else start_keyboard,
+    )
 
 
 @router.message(Command(commands=["hours"]))
