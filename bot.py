@@ -29,6 +29,7 @@ start_keyboard = ReplyKeyboardMarkup(
         [KeyboardButton(text="Старт")],
         [KeyboardButton(text="Стоп")],
         [KeyboardButton(text="Часы")],
+        [KeyboardButton(text="Пак")],
     ],
     resize_keyboard=True,
 )
@@ -38,6 +39,16 @@ stop_keyboard = ReplyKeyboardMarkup(
         [KeyboardButton(text="Старт")],
         [KeyboardButton(text="Стоп")],
         [KeyboardButton(text="Часы")],
+        [KeyboardButton(text="Пак")],
+    ],
+    resize_keyboard=True,
+)
+
+pack_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Пак 5+4+3+2+1"), KeyboardButton(text="Пак 5+3+1")],
+        [KeyboardButton(text="Пак 5+3"), KeyboardButton(text="Пак 5+1")],
+        [KeyboardButton(text="Пак 5")],
     ],
     resize_keyboard=True,
 )
@@ -48,6 +59,8 @@ class UserSettings:
     enabled: bool = False
     start_time: time | None = None
     end_time: time | None = None
+    reminder_pack: str = "pack_5"
+    pending_action: str | None = None
     last_sent_key: str | None = None
 
 
@@ -85,8 +98,12 @@ def load_user_settings() -> None:
             enabled=bool(data.get("enabled", False)),
             start_time=str_to_time(data.get("start_time")),
             end_time=str_to_time(data.get("end_time")),
+            reminder_pack=str(data.get("reminder_pack", "pack_5")),
+            pending_action=None,
             last_sent_key=None,
         )
+        if settings.reminder_pack not in PACKS:
+            settings.reminder_pack = "pack_5"
         user_settings[user_id] = settings
 
 
@@ -97,6 +114,7 @@ def save_user_settings() -> None:
             "enabled": settings.enabled,
             "start_time": time_to_str(settings.start_time),
             "end_time": time_to_str(settings.end_time),
+            "reminder_pack": settings.reminder_pack,
         }
         for user_id, settings in user_settings.items()
     }
@@ -126,27 +144,61 @@ def is_within_hours(now_time: time, start_time: time, end_time: time) -> bool:
     return now_time >= start_time or now_time <= end_time
 
 
+PACKS = {
+    "pack_5": {
+        "label": "Пак 5",
+        "minutes": (25, 55),
+    },
+    "pack_5_1": {
+        "label": "Пак 5+1",
+        "minutes": (25, 29, 55, 59),
+    },
+    "pack_5_3": {
+        "label": "Пак 5+3",
+        "minutes": (25, 27, 55, 57),
+    },
+    "pack_5_3_1": {
+        "label": "Пак 5+3+1",
+        "minutes": (25, 27, 29, 55, 57, 59),
+    },
+    "pack_5_4_3_2_1": {
+        "label": "Пак 5+4+3+2+1",
+        "minutes": (25, 26, 27, 28, 29, 55, 56, 57, 58, 59),
+    },
+}
+
+PACK_LABEL_TO_KEY = {pack["label"]: key for key, pack in PACKS.items()}
+
+
 async def notification_task() -> None:
     while True:
         now = datetime.now()
-        if now.minute in (25, 55):
+        for user_id, settings in list(user_settings.items()):
+            if not settings.enabled:
+                continue
+            if settings.start_time and settings.end_time:
+                if not is_within_hours(now.time(), settings.start_time, settings.end_time):
+                    continue
+            target_minutes = PACKS.get(settings.reminder_pack, PACKS["pack_5"])["minutes"]
+            if now.minute not in target_minutes:
+                continue
             minute_key = now.strftime("%Y-%m-%d-%H-%M")
-            for user_id, settings in list(user_settings.items()):
-                if not settings.enabled:
-                    continue
-                if settings.start_time and settings.end_time:
-                    if not is_within_hours(now.time(), settings.start_time, settings.end_time):
-                        continue
-                if settings.last_sent_key == minute_key:
-                    continue
-                try:
-                    await bot.send_message(
-                        user_id,
-                        "Напоминание: 5 минут до следующего получаса.",
-                    )
-                    settings.last_sent_key = minute_key
-                except TelegramNetworkError as exc:
-                    logging.error("Network error while sending reminder: %s", exc)
+            if settings.last_sent_key == minute_key:
+                continue
+            try:
+                if settings.reminder_pack == "pack_5_4_3_2_1":
+                    remaining = 30 - now.minute if now.minute < 30 else 60 - now.minute
+                    message_text = f"Напоминание: {remaining} минут до следующего получаса."
+                elif now.minute in (29, 59) and settings.reminder_pack in ("pack_5_1", "pack_5_3_1"):
+                    message_text = "Напоминание: 1 минута до следующего получаса."
+                elif now.minute in (27, 57) and settings.reminder_pack in ("pack_5_3", "pack_5_3_1"):
+                    message_text = "Напоминание: 3 минуты до следующего получаса."
+                else:
+                    message_text = "Напоминание: 5 минут до следующего получаса."
+                await bot.send_message(user_id, message_text)
+                settings.last_sent_key = minute_key
+            except TelegramNetworkError as exc:
+                logging.error("Network error while sending reminder: %s", exc)
         await asyncio.sleep(30)
 
 
@@ -169,6 +221,7 @@ async def start_web_server() -> None:
 async def start_handler(message: types.Message) -> None:
     settings = user_settings.setdefault(message.from_user.id, UserSettings())
     settings.enabled = True
+    settings.pending_action = None
     save_user_settings()
     await message.reply(
         "Уведомления включены. Нажми 'Часы' и задай рабочее время (HH:MM-HH:MM).",
@@ -180,6 +233,7 @@ async def start_handler(message: types.Message) -> None:
 async def stop_handler(message: types.Message) -> None:
     settings = user_settings.setdefault(message.from_user.id, UserSettings())
     settings.enabled = False
+    settings.pending_action = None
     save_user_settings()
     await message.reply("Уведомления остановлены.", reply_markup=start_keyboard)
 
@@ -188,6 +242,7 @@ async def stop_handler(message: types.Message) -> None:
 async def restart_handler(message: types.Message) -> None:
     settings = user_settings.setdefault(message.from_user.id, UserSettings())
     settings.enabled = True
+    settings.pending_action = None
     save_user_settings()
     await message.reply("Уведомления включены.", reply_markup=stop_keyboard)
 
@@ -198,31 +253,76 @@ async def time_handler(message: types.Message) -> None:
     await message.reply(f"Текущее время сервера: {current_time}")
 
 
+@router.message(Command(commands=["status"]))
+async def status_handler(message: types.Message) -> None:
+    settings = user_settings.setdefault(message.from_user.id, UserSettings())
+    work_hours = (
+        f"{settings.start_time.strftime('%H:%M')}-{settings.end_time.strftime('%H:%M')}"
+        if settings.start_time and settings.end_time
+        else "не задано"
+    )
+    pack_label = "Пак 5+1м" if settings.reminder_pack == "extended" else "Пак 5м"
+    pack_label = PACKS.get(settings.reminder_pack, PACKS["pack_5"])["label"]
+    status_text = "включены" if settings.enabled else "остановлены"
+    await message.reply(
+        "Текущие настройки:\n"
+        f"- Статус: {status_text}\n"
+        f"- Рабочие часы: {work_hours}\n"
+        f"- Пак: {pack_label}"
+    )
+
+
 @router.message(lambda message: message.text == "Часы")
 async def set_hours_prompt(message: types.Message) -> None:
+    settings = user_settings.setdefault(message.from_user.id, UserSettings())
+    settings.pending_action = "work"
+    save_user_settings()
     await message.reply("Отправь рабочие часы в формате 24ч: HH:MM-HH:MM")
 
 
 @router.message(Command(commands=["hours"]))
 async def hours_prompt(message: types.Message) -> None:
+    settings = user_settings.setdefault(message.from_user.id, UserSettings())
+    settings.pending_action = "work"
+    save_user_settings()
     await message.reply("Отправь рабочие часы в формате 24ч: HH:MM-HH:MM")
+
+
+@router.message(lambda message: message.text == "Пак")
+async def pack_prompt(message: types.Message) -> None:
+    await message.reply("Выбери пак напоминаний:", reply_markup=pack_keyboard)
+
+
+@router.message(lambda message: message.text in PACK_LABEL_TO_KEY)
+async def pack_handler(message: types.Message) -> None:
+    settings = user_settings.setdefault(message.from_user.id, UserSettings())
+    settings.reminder_pack = PACK_LABEL_TO_KEY[message.text]
+    save_user_settings()
+    await message.reply(
+        f"Пак обновлен: {message.text}.",
+        reply_markup=stop_keyboard if settings.enabled else start_keyboard,
+    )
 
 
 @router.message(lambda message: message.text and "-" in message.text)
 async def hours_handler(message: types.Message) -> None:
+    settings = user_settings.setdefault(message.from_user.id, UserSettings())
     parsed = parse_hours(message.text)
     if not parsed:
         await message.reply("Неверный формат. Пример: 09:00-18:00")
         return
     start_time, end_time = parsed
-    settings = user_settings.setdefault(message.from_user.id, UserSettings())
-    settings.start_time = start_time
-    settings.end_time = end_time
-    save_user_settings()
-    await message.reply(
-        f"Часы заданы: {start_time.strftime('%H:%M')}-{end_time.strftime('%H:%M')}",
-        reply_markup=stop_keyboard if settings.enabled else start_keyboard,
-    )
+    if settings.pending_action == "work":
+        settings.start_time = start_time
+        settings.end_time = end_time
+        settings.pending_action = None
+        save_user_settings()
+        await message.reply(
+            f"Рабочие часы заданы: {start_time.strftime('%H:%M')}-{end_time.strftime('%H:%M')}",
+            reply_markup=stop_keyboard if settings.enabled else start_keyboard,
+        )
+        return
+    await message.reply("Сначала нажми 'Часы'.")
 
 
 async def main() -> None:
