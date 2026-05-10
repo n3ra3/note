@@ -174,47 +174,51 @@ PACK_LABEL_TO_KEY = {pack["label"]: key for key, pack in PACKS.items()}
 
 async def notification_task() -> None:
     while True:
-        now = datetime.now(ZoneInfo(TZ_NAME))
-        for user_id, settings in list(user_settings.items()):
-            if not settings.enabled:
-                continue
-            if settings.start_time and settings.end_time:
-                if not is_within_hours(now.time(), settings.start_time, settings.end_time):
+        try:
+            now = datetime.now(ZoneInfo(TZ_NAME))
+            for user_id, settings in list(user_settings.items()):
+                if not settings.enabled:
                     continue
-            target_minutes = PACKS.get(settings.reminder_pack, PACKS["pack_5"])["minutes"]
-            if now.minute not in target_minutes:
-                continue
-            minute_key = now.strftime("%Y-%m-%d-%H-%M")
-            if settings.last_sent_key == minute_key:
-                continue
-            try:
-                if now.minute in (0, 30):
-                    current_time = now.strftime("%H:%M")
-                    message_text = (
-                        f"Уведомляем, что только что наступил {current_time}. "
-                        "Ссылки на кейсы доступны ниже:\n"
-                        "Kilowatt case - https://pirateswap.com/exchanger?mhn=Kilowatt+Case\n"
-                        "Revolution case - https://pirateswap.com/exchanger?mhn=Revolution+Case\n"
-                        "Fracture case - https://pirateswap.com/exchanger?mhn=Fracture+Case\n"
-                        "Recoil case - https://pirateswap.com/exchanger?mhn=Recoil+Case\n"
-                        "Snakebite case - https://pirateswap.com/exchanger?mhn=Snakebite+Case"
-                    )
-                elif settings.reminder_pack == "pack_5_4_3_2_1":
-                    remaining = 30 - now.minute if now.minute < 30 else 60 - now.minute
-                    message_text = f"Напоминание: {remaining} минут до следующего получаса."
-                elif now.minute in (29, 59) and settings.reminder_pack in ("pack_5_1", "pack_5_3_1"):
-                    message_text = "Напоминание: 1 минута до следующего получаса."
-                elif now.minute in (27, 57) and settings.reminder_pack in ("pack_5_3", "pack_5_3_1"):
-                    message_text = "Напоминание: 3 минуты до следующего получаса."
-                else:
-                    message_text = "Напоминание: 5 минут до следующего получаса."
-                await bot.send_message(user_id, message_text)
-                settings.last_sent_key = minute_key
-            except TelegramNetworkError as exc:
-                logging.error("Network error while sending reminder: %s", exc)
-        next_tick = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
-        delay = (next_tick - datetime.now()).total_seconds()
-        await asyncio.sleep(max(delay, 0.5))
+                if settings.start_time and settings.end_time:
+                    if not is_within_hours(now.time(), settings.start_time, settings.end_time):
+                        continue
+                target_minutes = PACKS.get(settings.reminder_pack, PACKS["pack_5"])["minutes"]
+                if now.minute not in target_minutes:
+                    continue
+                minute_key = now.strftime("%Y-%m-%d-%H-%M")
+                if settings.last_sent_key == minute_key:
+                    continue
+                try:
+                    if now.minute in (0, 30):
+                        current_time = now.strftime("%H:%M")
+                        message_text = (
+                            f"Уведомляем, что только что наступил {current_time}. "
+                            "Ссылки на кейсы доступны ниже:\n"
+                            "Kilowatt case - https://pirateswap.com/exchanger?mhn=Kilowatt+Case\n"
+                            "Revolution case - https://pirateswap.com/exchanger?mhn=Revolution+Case\n"
+                            "Fracture case - https://pirateswap.com/exchanger?mhn=Fracture+Case\n"
+                            "Recoil case - https://pirateswap.com/exchanger?mhn=Recoil+Case\n"
+                            "Snakebite case - https://pirateswap.com/exchanger?mhn=Snakebite+Case"
+                        )
+                    elif settings.reminder_pack == "pack_5_4_3_2_1":
+                        remaining = 30 - now.minute if now.minute < 30 else 60 - now.minute
+                        message_text = f"Напоминание: {remaining} минут до следующего получаса."
+                    elif now.minute in (29, 59) and settings.reminder_pack in ("pack_5_1", "pack_5_3_1"):
+                        message_text = "Напоминание: 1 минута до следующего получаса."
+                    elif now.minute in (27, 57) and settings.reminder_pack in ("pack_5_3", "pack_5_3_1"):
+                        message_text = "Напоминание: 3 минуты до следующего получаса."
+                    else:
+                        message_text = "Напоминание: 5 минут до следующего получаса."
+                    await bot.send_message(user_id, message_text)
+                    settings.last_sent_key = minute_key
+                except TelegramNetworkError as exc:
+                    logging.error("Network error while sending reminder: %s", exc)
+            next_tick = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
+            delay = (next_tick - datetime.now(ZoneInfo(TZ_NAME))).total_seconds()
+            await asyncio.sleep(max(delay, 0.5))
+        except Exception as exc:
+            logging.error("Notification loop failed: %s", exc)
+            await asyncio.sleep(1)
 
 
 async def start_web_server() -> None:
