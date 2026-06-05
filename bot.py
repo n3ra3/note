@@ -50,7 +50,7 @@ pack_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Пак 5+4+3+2+1"), KeyboardButton(text="Пак 5+3+1")],
         [KeyboardButton(text="Пак 5+3"), KeyboardButton(text="Пак 5+1")],
-        [KeyboardButton(text="Пак 5")],
+        [KeyboardButton(text="Пак 5")], KeyboardButton(text="Пак 1")]
     ],
     resize_keyboard=True,
 )
