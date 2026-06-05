@@ -207,7 +207,7 @@ async def notification_task() -> None:
                     elif settings.reminder_pack == "pack_5_4_3_2_1":
                         remaining = 30 - now.minute if now.minute < 30 else 60 - now.minute
                         message_text = f"Напоминание: {remaining} минут до следующего получаса."
-                    elif now.minute in (29, 59) and settings.reminder_pack in ("pack_5_1", "pack_5_3_1"):
+                    elif now.minute in (29, 59) and settings.reminder_pack in ("pack_5_1", "pack_5_3_1", "pack_1"):
                         message_text = "Напоминание: 1 минута до следующего получаса."
                     elif now.minute in (27, 57) and settings.reminder_pack in ("pack_5_3", "pack_5_3_1"):
                         message_text = "Напоминание: 3 минуты до следующего получаса."
