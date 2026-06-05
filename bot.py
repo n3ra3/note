@@ -147,6 +147,10 @@ def is_within_hours(now_time: time, start_time: time, end_time: time) -> bool:
 
 
 PACKS = {
+    "pack_1": {
+    "label": "Пак 1",
+    "minutes": (0, 29, 30, 59),
+    },
     "pack_5": {
         "label": "Пак 5",
         "minutes": (0, 25, 30, 55),
